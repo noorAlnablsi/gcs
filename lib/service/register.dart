@@ -5,7 +5,7 @@ import 'package:flutter_internet_application/service/tokenManage.dart';
 abstract class AuthService {
   Dio dio = Dio(
     BaseOptions(
-      baseUrl: 'http://127.0.0.1:8000/api', // صحيح
+      baseUrl: "http://192.168.1.2:8000/api",
       connectTimeout: Duration(seconds: 10),
       receiveTimeout: Duration(seconds: 10),
     ),
@@ -20,38 +20,27 @@ class AuthServiceImpl extends AuthService {
   @override
   Future<Map<String, dynamic>> register(User user) async {
     try {
-      print("==== SENDING REGISTER REQUEST ====");
-      print("DATA SENT: ${user.toMap()}");
-
       Response response = await dio.post(
         "/auth/register",
         data: user.toMap(),
-        options: Options(
-          validateStatus: (status) => true, // منع رمي errors لأي status code
-        ),
+        options: Options(validateStatus: (status) => true),
       );
 
-      print("==== REGISTER RESPONSE ====");
-      print("STATUS CODE: ${response.statusCode}");
-      print("HEADERS: ${response.headers.map}");
-      print("DATA: ${response.data}");
+      final res = response.data ?? {};
 
-      // هنا بناءً على ال response المتوقع من السيرفر
-      if (response.data != null &&
-          response.data["success"] == true &&
-          response.data["status_code"] == 200) {
-        return {
-          "success": true,
-          "identifier":
-              user.identifier, // السيرفر لم يرجع identifier، نستخدم المرسل
-        };
-      }
+      bool success = res["success"] == true && res["status_code"] == 200;
 
-      return {"success": false};
-    } catch (e) {
-      print("==== REGISTER EXCEPTION ====");
-      print(e);
-      return {"success": false};
+      return {
+        "success": success,
+        "message": res["message"]?.toString() ?? "",
+        "errors": res["errors"] ?? {},
+        "identifier": user.identifier, // لأن السيرفر لا يعيدها
+        "data": res["data"] ?? {},
+      };
+    } catch (e, s) {
+      print("REGISTER ERROR: $e");
+      print("STACK: $s");
+      return {"success": false, "message": "Unexpected error", "errors": {}};
     }
   }
 

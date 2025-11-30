@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_internet_application/service/register.dart';
+import 'package:flutter_internet_application/view/complain.dart';
+import 'package:flutter_internet_application/view/login.dart';
 
 class OtpVerify extends StatefulWidget {
   final String identifier; // الإيميل أو رقم الهاتف المستخدم عند التسجيل
@@ -36,7 +38,7 @@ class _OtpVerifyState extends State<OtpVerify> {
     if (success) {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const SuccessPage()),
+        MaterialPageRoute(builder: (_) => const LoginPage()),
       );
     } else {
       ScaffoldMessenger.of(
@@ -82,31 +84,20 @@ class _OtpVerifyState extends State<OtpVerify> {
                     : const Text(
                         "تأكيد",
                         style: TextStyle(
+                          color: Color.fromARGB(255, 255, 255, 255),
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-// صفحة نجاح بسيطة
-class SuccessPage extends StatelessWidget {
-  const SuccessPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("نجاح التحقق")),
-      body: const Center(
-        child: Text(
-          "🎉 تم التحقق بنجاح!",
-          style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
         ),
       ),
     );

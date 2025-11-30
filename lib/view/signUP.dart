@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_internet_application/view/registerform.dart';
+import 'package:flutter_internet_application/view/registerForm.dart';
 
 class SignUpOrEnterAsGuest extends StatelessWidget {
   SignUpOrEnterAsGuest({super.key});
@@ -49,7 +49,7 @@ class SignUpOrEnterAsGuest extends StatelessWidget {
                   onPressed: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => RegisterForm()),
+                      MaterialPageRoute(builder: (context) => RegisterPage()),
                     );
                   },
 

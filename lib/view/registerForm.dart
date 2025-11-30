@@ -1,187 +1,116 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_internet_application/model/userModel.dart';
 import 'package:flutter_internet_application/service/register.dart';
-import 'package:flutter_internet_application/view/otp.dart'; // ملف السيرفس
+import 'package:flutter_internet_application/view/otp.dart';
 
-class RegisterForm extends StatefulWidget {
-  RegisterForm({super.key});
+class RegisterPage extends StatefulWidget {
+  const RegisterPage({super.key});
 
   @override
-  State<RegisterForm> createState() => _RegisterFormState();
+  State<RegisterPage> createState() => _RegisterPageState();
 }
 
-class _RegisterFormState extends State<RegisterForm> {
-  final _formKey = GlobalKey<FormState>();
+class _RegisterPageState extends State<RegisterPage> {
+  final TextEditingController nameController = TextEditingController();
+  final TextEditingController identifierController = TextEditingController();
+  final TextEditingController nationalIdController = TextEditingController();
+  final TextEditingController passwordController = TextEditingController();
 
-  final nameController = TextEditingController();
-  final nationalIdController = TextEditingController();
-  final contactController = TextEditingController();
-  final passwordController = TextEditingController();
+  bool isLoading = false;
+  String errorMessage = "";
+  String successMessage = "";
 
-  final AuthService _authService = AuthServiceImpl();
-  bool _isLoading = false;
+  AuthServiceImpl auth = AuthServiceImpl();
 
-  void _register() async {
-    if (!_formKey.currentState!.validate()) return;
-
+  Future<void> register() async {
     setState(() {
-      _isLoading = true;
+      isLoading = true;
+      errorMessage = "";
+      successMessage = "";
     });
 
     User user = User(
       name: nameController.text.trim(),
+      identifier: identifierController.text.trim(),
       national_id: nationalIdController.text.trim(),
-      identifier: contactController.text.trim(),
       password: passwordController.text.trim(),
       role_id: 3,
     );
 
-    var result = await _authService.register(user);
+    final result = await auth.register(user);
 
     setState(() {
-      _isLoading = false;
+      isLoading = false;
+
+      if (result["success"] == true) {
+        successMessage = "تم إنشاء الحساب بنجاح 🎉";
+
+        // 🔥 الانتقال إلى صفحة OTP مباشرة
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => OtpVerify(
+              identifier: user.identifier, // ← تمرير الإيميل أو الرقم
+            ),
+          ),
+        );
+      } else {
+        if (result["errors"] != null && result["errors"].isNotEmpty) {
+          errorMessage = result["errors"].values.first[0].toString();
+        } else {
+          errorMessage = result["message"] ?? "حدث خطأ غير متوقع";
+        }
+      }
     });
-
-    print("REGISTER RESULT: $result");
-
-    // إذا رجع identifier موجود، ننتقل لصفحة OTP
-    if (result["identifier"] != null) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => OtpVerify(identifier: result["identifier"]),
-        ),
-      );
-    } else {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => OtpVerify(identifier: result["identifier"]),
-        ),
-      );
-    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("إنشاء حساب"), centerTitle: true),
+      appBar: AppBar(title: const Text("Register")),
       body: Padding(
-        padding: EdgeInsets.all(20),
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            children: [
-              TextFormField(
-                controller: nameController,
-                decoration: InputDecoration(
-                  labelText: "الاسم الكامل",
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.all(Radius.circular(12)),
-                  ),
-                ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return "الرجاء إدخال الاسم";
-                  }
-                  return null;
-                },
-              ),
-              SizedBox(height: 20),
-              TextFormField(
-                controller: nationalIdController,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: "الرقم الوطني",
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.all(Radius.circular(12)),
-                  ),
-                ),
-                // validator: (value) {
-                //   if (value == null || value.length != 11) {
-                //     return "الرقم الوطني يجب أن يكون 11 خانات";
-                //   }
-                //   return null;
-                // },
-              ),
-              SizedBox(height: 20),
-              TextFormField(
-                controller: contactController,
-                decoration: InputDecoration(
-                  labelText: "الإيميل أو رقم الموبايل",
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.all(Radius.circular(12)),
-                  ),
-                ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return "الرجاء إدخال الإيميل أو رقم الموبايل";
-                  }
-                  final input = value.trim();
-                  final emailRegex = RegExp(r'^[\w\.-]+@[\w\.-]+\.\w+$');
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(labelText: "Name"),
+            ),
+            TextField(
+              controller: identifierController,
+              decoration: const InputDecoration(labelText: "Email / Phone"),
+            ),
+            TextField(
+              controller: nationalIdController,
+              decoration: const InputDecoration(labelText: "National ID"),
+            ),
+            TextField(
+              controller: passwordController,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: "Password"),
+            ),
 
-                  if (emailRegex.hasMatch(input)) {
-                    return null;
-                  }
-                },
+            const SizedBox(height: 20),
+
+            if (isLoading)
+              const Center(child: CircularProgressIndicator())
+            else
+              ElevatedButton(
+                onPressed: register,
+                child: const Text("Create Account"),
               ),
-              SizedBox(height: 20),
-              TextFormField(
-                controller: passwordController,
-                obscureText: true,
-                decoration: InputDecoration(
-                  labelText: "كلمة السر",
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.all(Radius.circular(12)),
-                  ),
-                ),
-                validator: (value) {
-                  if (value == null || value.length < 6) {
-                    return "كلمة السر يجب أن تكون 6 محارف على الأقل";
-                  }
-                  return null;
-                },
-              ),
-              SizedBox(height: 50),
-              SizedBox(
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _register,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: _isLoading
-                      ? CircularProgressIndicator(color: Colors.white)
-                      : Text(
-                          "إنشاء الحساب",
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                ),
-              ),
-            ],
-          ),
+
+            const SizedBox(height: 15),
+
+            if (errorMessage.isNotEmpty)
+              Text(errorMessage, style: const TextStyle(color: Colors.red)),
+
+            if (successMessage.isNotEmpty)
+              Text(successMessage, style: const TextStyle(color: Colors.green)),
+          ],
         ),
       ),
-    );
-  }
-}
-
-// واجهة تجريبية بعد التسجيل
-class HomePage extends StatelessWidget {
-  HomePage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text("الصفحة الرئيسية")),
-      body: Center(child: Text("تم تسجيل الدخول بنجاح!")),
     );
   }
 }
