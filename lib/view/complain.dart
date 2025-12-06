@@ -1,296 +1,539 @@
 import 'dart:io';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_internet_application/model/complain.dart';
+import 'package:flutter_internet_application/core/widget/app_button.dart';
+import 'package:flutter_internet_application/core/widget/app_textfield.dart';
+import 'package:flutter_internet_application/view/allComplains.dart';
+import 'package:gap/gap.dart';
 import 'package:geolocator/geolocator.dart';
 
-class ComplaintFormPage extends StatefulWidget {
-  const ComplaintFormPage({super.key});
+import '../core/resource/color.dart';
+import '../service/complainService.dart';
+
+class ComplaintStepOne extends StatefulWidget {
+  final String userToken;
+  final Map<String, dynamic> data;
+
+  const ComplaintStepOne({
+    Key? key,
+    required this.userToken,
+    required this.data,
+  }) : super(key: key);
 
   @override
-  State<ComplaintFormPage> createState() => _ComplaintFormPageState();
+  State<ComplaintStepOne> createState() => _ComplaintStepOneState();
 }
 
-class _ComplaintFormPageState extends State<ComplaintFormPage> {
-  final PageController _pageController = PageController();
+class _ComplaintStepOneState extends State<ComplaintStepOne> {
+  final TextEditingController complaintTypeController = TextEditingController();
+  final TextEditingController destinationController = TextEditingController();
+  final TextEditingController addressController = TextEditingController();
 
-  // متغيرات لربط الحقول بالموديل
-  String? complaintTypeId;
-  String destinationId = "";
-  String description = "";
+  bool autoLocation = false;
+  bool fetchingLocation = false;
+  double? latitude;
+  double? longitude;
 
-  String lat = "";
-  String lng = "";
-  String address = "";
+  final List<Map<String, dynamic>> complaintTypes = [
+    {"id": "1", "name": "Service Delay"},
+    {"id": "2", "name": "Misconduct"},
+    {"id": "3", "name": "Billing Issue"},
+    {"id": "4", "name": "Technical Problem"},
+    {"id": "5", "name": "Other"},
+  ];
 
-  File? document;
-  List<File> documents = [];
+  final List<Map<String, dynamic>> destinations = [
+    {"id": "1", "name": "Ministry of Energy"},
+    {"id": "2", "name": "Ministry of Interior"},
+  ];
 
-  int currentPage = 0;
+  Future<void> getCurrentLocation() async {
+    setState(() => fetchingLocation = true);
 
-  @override
-  void initState() {
-    super.initState();
-
-    // 🔥 طلب الإذن بعد 800ms
-    Future.delayed(const Duration(milliseconds: 800), () {
-      requestLocationPermission();
-    });
-  }
-
-  // ============================================================
-  //      🔥 طلب إذن الموقع + تعبئة حقول الإحداثيات تلقائياً
-  // ============================================================
-  Future<void> requestLocationPermission() async {
-    bool serviceEnabled;
-    LocationPermission permission;
-
-    // التحقق من تفعيل GPS
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("يرجى تفعيل GPS")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("يرجى تفعيل خدمة الموقع على الجهاز")),
+      );
+      setState(() => fetchingLocation = false);
       return;
     }
 
-    // التحقق من الإذن
-    permission = await Geolocator.checkPermission();
-
+    LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("تم رفض إذن الوصول إلى الموقع")),
+        );
+        setState(() => fetchingLocation = false);
+        return;
+      }
     }
 
     if (permission == LocationPermission.deniedForever) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("تم رفض إذن الوصول للموقع نهائيًا. افتح الإعدادات."),
+          content: Text(
+            "تم رفض إذن الموقع بشكل دائم، يرجى تغييره من إعدادات الجهاز",
+          ),
         ),
+      );
+      setState(() => fetchingLocation = false);
+      return;
+    }
+
+    try {
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      latitude = position.latitude;
+      longitude = position.longitude;
+      widget.data['lat'] = latitude.toString();
+      widget.data['lng'] = longitude.toString();
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("فشل الحصول على الموقع")));
+    }
+
+    setState(() => fetchingLocation = false);
+  }
+
+  void submitData() {
+    widget.data['complaint_type_id'] = complaintTypeController.text.isNotEmpty
+        ? complaintTypeController.text
+        : null;
+    widget.data['destination_id'] = destinationController.text.isNotEmpty
+        ? destinationController.text
+        : null;
+    widget.data['address'] = addressController.text.isNotEmpty
+        ? addressController.text
+        : null;
+
+    // التحقق من الموقع إذا كان autoLocation مفعل
+    if (autoLocation && (latitude == null || longitude == null)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("يرجى تحديد الموقع الجغرافي")),
       );
       return;
     }
 
-    // الحصول على الموقع بعد السماح
-    Position pos = await Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.high,
-    );
-
-    setState(() {
-      lat = pos.latitude.toString();
-      lng = pos.longitude.toString();
-    });
-
-    print("Lat: $lat");
-    print("Lng: $lng");
-  }
-
-  // ============================================================
-  //              اختيار ملف واحد
-  // ============================================================
-  Future<void> pickSingleFile() async {
-    final res = await FilePicker.platform.pickFiles(allowMultiple: false);
-
-    if (res != null) {
-      setState(() {
-        document = File(res.files.single.path!);
-      });
+    if (widget.data['complaint_type_id'] == null ||
+        widget.data['destination_id'] == null ||
+        widget.data['address'] == null ||
+        widget.data['lat'] == null ||
+        widget.data['lng'] == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("يرجى تعبئة جميع الحقول")));
+      return;
     }
-  }
+    print("User token before navigating: ${widget.userToken}");
 
-  // ============================================================
-  //              اختيار ملفات متعددة
-  // ============================================================
-  Future<void> pickMultipleFiles() async {
-    final res = await FilePicker.platform.pickFiles(allowMultiple: true);
-
-    if (res != null) {
-      setState(() {
-        documents = res.paths.map((p) => File(p!)).toList();
-      });
-    }
-  }
-
-  // ============================================================
-  //                       إرسال البيانات
-  // ============================================================
-  void submit() {
-    Complain c = Complain(
-      complaintTypeId: complaintTypeId,
-      destinationId: destinationId,
-      lat: lat,
-      lng: lng,
-      address: address,
-      description: description,
-      document: document,
-      documents: documents,
-    );
-
-    print("===== FINAL RESULT =====");
-    print(c.toMap());
-
-    ScaffoldMessenger.of(
+    Navigator.push(
       context,
-    ).showSnackBar(const SnackBar(content: Text("تم إرسال الشكوى بنجاح")));
+      MaterialPageRoute(
+        builder: (_) => ComplaintStepTwo(
+          data: widget.data, // تمرير البيانات المعبأة في الخطوة الأولى
+          userToken: widget.userToken, // تمرير توكن المستخدم
+        ),
+      ),
+    );
   }
 
-  // ============================================================
-  //                       واجهة التطبيق
-  // ============================================================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("تقديم شكوى"), centerTitle: true),
-      body: Column(
-        children: [
-          Expanded(
-            child: PageView(
-              controller: _pageController,
-              physics: const NeverScrollableScrollPhysics(),
-              children: [
-                // -------- PAGE 1 --------
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: ListView(
-                    children: [
-                      const Text("نوع الشكوى", style: TextStyle(fontSize: 16)),
-                      TextField(
-                        onChanged: (v) => complaintTypeId = v,
-                        decoration: const InputDecoration(
-                          hintText: "مثال: انقطاع خدمة",
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      const Text(
-                        "الجهة المعنية",
-                        style: TextStyle(fontSize: 16),
-                      ),
-                      TextField(
-                        onChanged: (v) => destinationId = v,
-                        decoration: const InputDecoration(
-                          hintText: "مثال: البلدية",
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      const Text("وصف المشكلة", style: TextStyle(fontSize: 16)),
-                      TextField(maxLines: 3, onChanged: (v) => description = v),
-                    ],
-                  ),
+      resizeToAvoidBottomInset: true,
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: AppColors.primary,
+        title: const Text(
+          "تقديم شكوى - الخطوة الأولى",
+          style: TextStyle(color: Colors.white),
+        ),
+        centerTitle: true,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.only(top: 50),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 20),
+              child: AppTextField(
+                hintText: "نوع الشكوى",
+                controller: complaintTypeController,
+                labelText: "نوع الشكوى",
+                myIcon: const Icon(Icons.list),
+                traillingIcon: PopupMenuButton<Map<String, dynamic>>(
+                  icon: const Icon(Icons.arrow_drop_down),
+                  onSelected: (value) {
+                    complaintTypeController.text = value['id'];
+                  },
+                  itemBuilder: (context) => complaintTypes
+                      .map(
+                        (e) => PopupMenuItem(value: e, child: Text(e['name'])),
+                      )
+                      .toList(),
                 ),
-
-                // -------- PAGE 2 --------
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: ListView(
-                    children: [
-                      const Text("العنوان", style: TextStyle(fontSize: 16)),
-                      TextField(onChanged: (v) => address = v),
-                      const SizedBox(height: 16),
-
-                      const Text(
-                        "خط العرض (Lat)",
-                        style: TextStyle(fontSize: 16),
-                      ),
-                      TextField(
-                        controller: TextEditingController(text: lat),
-                        readOnly: true,
-                        decoration: const InputDecoration(
-                          hintText: "يتم تعبئته تلقائيًا",
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      const Text(
-                        "خط الطول (Lng)",
-                        style: TextStyle(fontSize: 16),
-                      ),
-                      TextField(
-                        controller: TextEditingController(text: lng),
-                        readOnly: true,
-                        decoration: const InputDecoration(
-                          hintText: "يتم تعبئته تلقائيًا",
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      const Text(
-                        "إرفاق وثيقة واحدة",
-                        style: TextStyle(fontSize: 16),
-                      ),
-                      ElevatedButton(
-                        onPressed: pickSingleFile,
-                        child: const Text("اختر ملف"),
-                      ),
-                      if (document != null)
-                        Text("تم اختيار: ${document!.path.split('/').last}"),
-
-                      const SizedBox(height: 20),
-
-                      const Text(
-                        "إرفاق عدة وثائق",
-                        style: TextStyle(fontSize: 16),
-                      ),
-                      ElevatedButton(
-                        onPressed: pickMultipleFiles,
-                        child: const Text("اختر عدة ملفات"),
-                      ),
-
-                      if (documents.isNotEmpty)
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: documents
-                              .map((f) => Text("• ${f.path.split('/').last}"))
-                              .toList(),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
-
-          // -------- Navigation Buttons --------
-          Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Row(
-              children: [
-                if (currentPage == 1)
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        _pageController.previousPage(
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeInOut,
-                        );
-                        setState(() => currentPage = 0);
-                      },
-                      child: const Text("السابق"),
-                    ),
-                  ),
-                if (currentPage == 1) const SizedBox(width: 10),
-
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {
-                      if (currentPage == 0) {
-                        _pageController.nextPage(
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeInOut,
-                        );
-                        setState(() => currentPage = 1);
+            const SizedBox(height: 20),
+            AppTextField(
+              hintText: "الجهة المسؤولة",
+              controller: destinationController,
+              labelText: "الجهة المسؤولة",
+              myIcon: const Icon(Icons.location_city),
+              traillingIcon: PopupMenuButton<Map<String, dynamic>>(
+                icon: const Icon(Icons.arrow_drop_down),
+                onSelected: (value) {
+                  destinationController.text = value['id'];
+                },
+                itemBuilder: (context) => destinations
+                    .map((e) => PopupMenuItem(value: e, child: Text(e['name'])))
+                    .toList(),
+              ),
+            ),
+            const SizedBox(height: 20),
+            AppTextField(
+              hintText: "العنوان",
+              controller: addressController,
+              labelText: "العنوان",
+              myIcon: const Icon(Icons.place),
+            ),
+            const SizedBox(height: 10),
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Row(
+                children: [
+                  Checkbox(
+                    value: autoLocation,
+                    onChanged: (value) async {
+                      setState(() {
+                        autoLocation = value ?? false;
+                      });
+                      if (autoLocation) {
+                        await getCurrentLocation();
                       } else {
-                        submit();
+                        latitude = null;
+                        longitude = null;
+                        widget.data.remove('lat');
+                        widget.data.remove('lng');
                       }
                     },
-                    child: Text(currentPage == 0 ? "التالي" : "إرسال"),
                   ),
-                ),
-              ],
+                  const Text("تحديد الموقع تلقائيًا"),
+                  if (fetchingLocation)
+                    const Padding(
+                      padding: EdgeInsets.only(left: 10),
+                      child: SizedBox(
+                        width: 15,
+                        height: 15,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                ],
+              ),
             ),
-          ),
-        ],
+            // رفع زر "التالي" 25 بكسل عن الأسفل
+            const SizedBox(height: 25),
+            AppButton(text: "التالي", onTap: submitData),
+          ],
+        ),
       ),
     );
   }
 }
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+class ComplaintStepTwo extends StatefulWidget {
+  final Map data;
+  final String userToken;
+  const ComplaintStepTwo({
+    super.key,
+    required this.data,
+    required this.userToken,
+  });
+
+  @override
+  State<ComplaintStepTwo> createState() => _ComplaintStepTwoState();
+}
+
+class _ComplaintStepTwoState extends State<ComplaintStepTwo> {
+  final descCtrl = TextEditingController();
+  List<File> images = [];
+  List<File> documents = [];
+  bool sending = false;
+
+  Future<void> pickImages() async {
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: true,
+      type: FileType.image,
+    );
+    if (result != null) {
+      images = result.paths.map((e) => File(e!)).toList();
+      setState(() {});
+    }
+  }
+
+  Future<void> pickDocuments() async {
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: true,
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'doc', 'docx'],
+    );
+    if (result != null) {
+      documents = result.paths.map((e) => File(e!)).toList();
+      setState(() {});
+    }
+  }
+
+  Future<void> send() async {
+    if (descCtrl.text.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("يرجى كتابة وصف المشكلة")));
+      return;
+    }
+
+    setState(() => sending = true);
+    final success = await sendComplainService.sendComplaint(
+      data: {...widget.data, "description": descCtrl.text.trim()},
+      images: images,
+      documents: documents,
+      token: widget.userToken, // توكن المستخدم الصحيح
+    );
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(success ? "تم إرسال الشكوى بنجاح ✅" : "فشل إرسال الشكوى"),
+        backgroundColor: success ? Colors.green : Colors.red,
+      ),
+    );
+
+    if (success) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => ComplaintsPage(userToken: '')),
+      );
+    }
+
+    setState(() => sending = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text("تقديم شكوى - الخطوة ٢")),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("وصف المشكلة", style: TextStyle(fontWeight: FontWeight.bold)),
+            Gap(6),
+            TextField(
+              controller: descCtrl,
+              maxLines: 5,
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: Colors.grey[200],
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+            Gap(20),
+
+            Text("إرفاق صور", style: TextStyle(fontWeight: FontWeight.bold)),
+            Gap(6),
+            ElevatedButton.icon(
+              onPressed: pickImages,
+              icon: Icon(Icons.image),
+              label: Text("اختيار صور"),
+              style: ElevatedButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+            if (images.isNotEmpty) Text("${images.length} صورة مختارة"),
+            Gap(20),
+
+            Text("إرفاق وثائق", style: TextStyle(fontWeight: FontWeight.bold)),
+            Gap(6),
+            ElevatedButton.icon(
+              onPressed: pickDocuments,
+              icon: Icon(Icons.attach_file),
+              label: Text("اختيار ملفات"),
+              style: ElevatedButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+            if (documents.isNotEmpty) Text("${documents.length} ملف مختار"),
+            Gap(30),
+
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: sending ? null : send,
+                child: sending
+                    ? SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(color: Colors.white),
+                      )
+                    : Text("إرسال الشكوى"),
+                style: ElevatedButton.styleFrom(
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// class ComplaintStepTwo extends StatefulWidget {
+//   const ComplaintStepTwo({super.key});
+
+//   @override
+//   State<ComplaintStepTwo> createState() => _ComplaintStepTwoState();
+// }
+
+// class _ComplaintStepTwoState extends State<ComplaintStepTwo> {
+//   final _formKey = GlobalKey<FormState>();
+
+//   final TextEditingController descriptionController = TextEditingController();
+//   final TextEditingController addressController = TextEditingController();
+
+//   List<File> selectedImages = [];
+//   List<File> selectedDocuments = [];
+
+//   /// Pick multiple images
+//   Future<void> pickImages() async {
+//     final result = await FilePicker.platform.pickFiles(
+//       allowMultiple: true,
+//       type: FileType.image,
+//     );
+
+//     if (result != null && result.files.isNotEmpty) {
+//       setState(() {
+//         selectedImages = result.paths.map((path) => File(path!)).toList();
+//       });
+//     }
+//   }
+
+//   /// Pick documents (PDF / Word / etc.)
+//   Future<void> pickDocuments() async {
+//     final result = await FilePicker.platform.pickFiles(
+//       allowMultiple: true,
+//       type: FileType.custom,
+//       allowedExtensions: ["pdf", "doc", "docx"],
+//     );
+
+//     if (result != null && result.files.isNotEmpty) {
+//       setState(() {
+//         selectedDocuments.addAll(result.paths.map((path) => File(path!)));
+//       });
+//     }
+//   }
+
+//   /// Send complaint
+//   Future<void> send() async {
+//     if (!_formKey.currentState!.validate()) return;
+
+//     final success = await ComplaintService.sendComplaint(
+//       data: {
+//         "description": descriptionController.text,
+//         "address": addressController.text,
+//       },
+//       images: selectedImages,
+//       documents: selectedDocuments,
+//       token: "", // سيتم جلب التوكن داخل الـ service
+//     );
+
+//     if (success) {
+//       if (context.mounted) {
+//         ScaffoldMessenger.of(
+//           context,
+//         ).showSnackBar(const SnackBar(content: Text("تم إرسال الشكوى بنجاح")));
+
+//         Navigator.pushReplacement(
+//           context,
+//           MaterialPageRoute(builder: (_) => const allMyComplaints()),
+//         );
+//       }
+//     } else {
+//       ScaffoldMessenger.of(
+//         context,
+//       ).showSnackBar(const SnackBar(content: Text("فشل إرسال الشكوى")));
+//     }
+//   }
+
+//   @override
+//   Widget build(BuildContext context) {
+//     return Scaffold(
+//       appBar: AppBar(title: const Text("إرسال شكوى")),
+//       body: SingleChildScrollView(
+//         padding: const EdgeInsets.all(16),
+//         child: Form(
+//           key: _formKey,
+//           child: Column(
+//             children: [
+//               AppTextField(
+//                 hintText: "وصف الشكوى",
+//                 labelText: "الوصف",
+//                 controller: descriptionController,
+//                 validator: (v) => v!.isEmpty ? "الرجاء كتابة وصف الشكوى" : null,
+//               ),
+//               const SizedBox(height: 16),
+
+//               AppTextField(
+//                 hintText: "العنوان",
+//                 labelText: "العنوان",
+//                 controller: addressController,
+//                 validator: (v) => v!.isEmpty ? "الرجاء إدخال العنوان" : null,
+//               ),
+
+//               const SizedBox(height: 20),
+
+//               AppButton(text: "اختيار الصور", onTap: pickImages, width: 330),
+//               if (selectedImages.isNotEmpty)
+//                 Text("تم اختيار ${selectedImages.length} صورة"),
+
+//               const SizedBox(height: 20),
+
+//               AppButton(text: "رفع مستند", onTap: pickDocuments, width: 330),
+//               if (selectedDocuments.isNotEmpty)
+//                 Text("تم اختيار ${selectedDocuments.length} مستند"),
+
+//               const SizedBox(height: 30),
+
+//               AppButton(
+//                 text: "إرسال الشكوى",
+//                 onTap: send,
+//                 width: 330,
+//                 height: 55,
+//               ),
+//             ],
+//           ),
+//         ),
+//       ),
+//     );
+//   }
+// }

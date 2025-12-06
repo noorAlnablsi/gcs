@@ -1,7 +1,7 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter_internet_application/view/signUP.dart';
+import 'package:flutter_internet_application/view/Auth/signUP.dart';
 import 'firebase_options.dart';
 
 void main() async {
@@ -28,4 +28,5 @@ class MyApp extends StatelessWidget {
       home: SignUpOrEnterAsGuest(),
     );
   }
+
 }

@@ -24,6 +24,7 @@ class Complain {
     required this.description,
     this.document,
     required this.documents,
+    required List<File> images,
   });
 
   Complain copyWith({
@@ -45,6 +46,7 @@ class Complain {
       description: description ?? this.description,
       document: document ?? this.document,
       documents: documents ?? this.documents,
+      images: [],
     );
   }
 
@@ -76,6 +78,7 @@ class Complain {
               map['documents'],
             ).map((path) => File(path)).toList()
           : [],
+      images: [],
     );
   }
 
