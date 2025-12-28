@@ -36,10 +36,10 @@ class _OtpVerifyState extends State<OtpVerify> {
     setState(() => _isLoading = false);
 
     if (success) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const LoginPage()),
-      );
+      // Navigator.pushReplacement(
+      //   context,
+      //   MaterialPageRoute(builder: (_) => const LoginPage()),
+      // );
     } else {
       ScaffoldMessenger.of(
         context,

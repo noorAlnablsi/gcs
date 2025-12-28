@@ -174,10 +174,10 @@ class SignUpOrEnterAsGuest extends StatelessWidget {
                 AppButton(
                   text: "تسجيل الدخول",
                   onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => LoginPage()),
-                    );
+                    // Navigator.push(
+                    //   context,
+                    //   MaterialPageRoute(builder: (context) => LoginPage()),
+                    // );
                   },
                   width: double.infinity,
                   height: 50,
