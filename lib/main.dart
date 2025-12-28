@@ -172,41 +172,60 @@ import 'package:flutter_internet_application/view/Auth/signUP.dart';
 
 import 'firebase_options.dart';
 
-// // 🔵 Handler للإشعارات في الخلفية
-// Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-//   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-//   debugPrint("🔔 إشعار من الخلفية: ${message.notification?.title}");
-// }
 
-// // navigatorKey لإظهار الـ pop-up من أي مكان
-// final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+// 🔵 Handler للإشعارات في الخلفية
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  debugPrint("🔔 إشعار من الخلفية: ${message.notification?.title}");
+}
+
+// نحتاج navigatorKey لعرض الـ pop-up من خارج سياق الواجهة
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  // 🟦 تهيئة Firebase
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  // 🟦 تسجيل الـ background handler
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-  // String? token = await FirebaseMessaging.instance.getToken();
-  // debugPrint("📱 Device Token: $token");
+  // 🟦 جلب التوكن وطباعة
+  String? token = await FirebaseMessaging.instance.getToken();
+  debugPrint("📱 Device Token: $token");
 
+  // 🟦 تشغيل التطبيق
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  bool isDarkMode = false; // false → Light, true → Dark
+
+  void toggleTheme() {
+    setState(() {
+      isDarkMode = !isDarkMode;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      // navigatorKey: navigatorKey,
+      navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
-      title: "Flutter App",
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.system, // ← يتغير تلقائياً حسب إعداد الجهاز
-      home: NotificationHandler(child: SignUpOrEnterAsGuest()),
+      themeMode: isDarkMode ? ThemeMode.dark : ThemeMode.light,
+      home: NotificationHandler(
+        child: SignUpOrEnterAsGuest(), // هنا ممكن بعد التسجيل تنتقلي للصفحة ComplaintStepOne مع toggleTheme
+      ),
     );
   }
 }
@@ -232,9 +251,9 @@ class _NotificationHandlerState extends State<NotificationHandler> {
 
   Future<void> _setupNotifications() async {
     FirebaseMessaging messaging = FirebaseMessaging.instance;
+
     await messaging.requestPermission(alert: true, badge: true, sound: true);
 
-    // Foreground
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       debugPrint("📩 إشعار Foreground: ${message.notification?.title}");
       if (message.notification != null) {
@@ -245,40 +264,38 @@ class _NotificationHandlerState extends State<NotificationHandler> {
       }
     });
 
-    // Background
     FirebaseMessaging.onMessageOpenedApp.listen((message) {
       debugPrint("📨 فتح التطبيق من Background عبر الإشعار");
       if (message.data.containsKey("complaint_id")) {
         String id = message.data["complaint_id"];
-        // التنقل لصفحة الشكوى لو حاب
+        // يمكنك إضافة تنقل لصفحة الشكوى
       }
     });
 
-    // Terminated
     RemoteMessage? initialMsg = await FirebaseMessaging.instance.getInitialMessage();
     if (initialMsg != null) {
       debugPrint("🚀 التطبيق فتح من إشعار (Terminated)");
       if (initialMsg.data.containsKey("complaint_id")) {
         String id = initialMsg.data["complaint_id"];
-        // التنقل لصفحة الشكوى لو حاب
+        // التنقل لصفحة الشكوى لو أردت
       }
     }
   }
 
   void _showPopup(String title, String body) {
-    // showDialog(
-      // context: navigatorKey.currentContext!,
-      // builder: (_) => AlertDialog(
-        // title: Text(title),
-        // content: Text(body),
-        // actions: [
-        //   TextButton(
-        //     onPressed: () => Navigator.pop(navigatorKey.currentContext!),
-        //     child: const Text("إغلاق"),
-        //   ),
-    //     ],
-    //   ),
-    // );
+    showDialog(
+      context: navigatorKey.currentContext!,
+      builder: (_) => AlertDialog(
+        title: Text(title),
+        content: Text(body),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(navigatorKey.currentContext!),
+            child: const Text("إغلاق"),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
